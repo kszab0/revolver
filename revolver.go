@@ -127,3 +127,22 @@ func Run(builds []BuildFunc, run RunFunc) (func(), error) {
 
 	return run()
 }
+
+// FilterFunc can filter files.
+type FilterFunc func() bool
+
+// Filter returns a FilterFunc that can filter files based on include and 
+// exclude patterns.
+func Filter(files, includePatterns, excludePatterns []string) FilterFunc {
+    return func() bool {
+        for _, file := range files {
+            if matchPatterns(excludePatterns, file) {
+                continue
+            }
+            if matchPatterns(includePatterns, file) {
+                return true
+            }
+        }
+        return false
+    }
+}

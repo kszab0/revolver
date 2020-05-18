@@ -300,3 +300,43 @@ func TestRun(t *testing.T) {
         })
     }
 }
+
+func TestFilter(t *testing.T) {
+    type testCase struct {
+        files, includes, excludes []string
+        changed bool
+    }
+    for name, tc := range map[string]testCase {
+        "empty": {
+            files: []string{},
+            includes: []string{},
+            excludes: []string{},
+            changed: false,
+        },
+        "include all, no excludes": {
+            files: []string{"file.go", "file_test.go"},
+            includes: []string{"*"},
+            excludes: []string{},
+            changed: true,
+        },
+        "exclude included": {
+            files: []string{"file.go", "file_test.go"},
+            includes: []string{"*.go"},
+            excludes: []string{"*.go"},
+            changed: false,
+        },
+        "exclude _test.go files": {
+            files: []string{"file.go", "file_test.go"},
+            includes: []string{"*"},
+            excludes: []string{"*_test.go"},
+            changed: true,
+        },
+    } {
+        t.Run(name, func(t *testing.T) {
+            changed := Filter(tc.files, tc.includes, tc.excludes)()
+            if changed != tc.changed {
+                t.Errorf("Filter() should return %v; got: %v", tc.changed, changed)
+            }
+        })
+    }
+}
