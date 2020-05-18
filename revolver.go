@@ -1,8 +1,11 @@
 package revolver
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/bmatcuk/doublestar"
 )
@@ -69,4 +72,58 @@ func Detect(dir string, excludeDirs []string) DetectFunc {
 		prev = curr
 		return changed
 	}
+}
+
+// BuildFunc is a function that is executed before a RunFunc
+type BuildFunc func() error
+
+// BuildCommand returns a BuildFunc that can execute a command with arguments.
+func BuildCommand(command string, args ...string) BuildFunc {
+	return func() error {
+		cmd := exec.Command(command, args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("Error running: \"%s %s\": %w", command, strings.Join(args, ""), err)
+		}
+		return nil
+	}
+}
+
+// RunFunc is a function that runs like a daemon and can be stopped with the
+// returned stop function.
+type RunFunc func() (stop func(), err error)
+
+// RunCommand returns a RunFunc that can start a command line app with arguments.
+// It returns a function that can kill the started process.
+func RunCommand(command string, args ...string) RunFunc {
+	return func() (func(), error) {
+		cmd := exec.Command(command, args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			return nil, fmt.Errorf("Error running: \"%s %s\": %w", command, strings.Join(args, " "), err)
+		}
+		stop := func() {
+			cmd.Process.Kill()
+		}
+		return stop, nil
+	}
+}
+
+// Run executes the build and run functions. All build functions are executed
+// before the run function. It returns an error and stops the executions if an
+// error happens. Otherwise it returns a function to stop the run function's execution.
+func Run(builds []BuildFunc, run RunFunc) (func(), error) {
+	for _, build := range builds {
+		if err := build(); err != nil {
+			return nil, err
+		}
+	}
+
+	if run == nil {
+		return func() {}, nil
+	}
+
+	return run()
 }

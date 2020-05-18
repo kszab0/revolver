@@ -215,3 +215,88 @@ func TestDetect(t *testing.T) {
 		})
 	}
 }
+
+func TestRun(t *testing.T) {
+    buildCmd := func(command string, args ...string) func(t *testing.T) []BuildFunc {
+        return func(t *testing.T) []BuildFunc {
+            return []BuildFunc{BuildCommand(command, args...)}
+        }
+    }
+    buildErr := func(t *testing.T) []BuildFunc {
+        return []BuildFunc{
+            BuildCommand("exit", "1"),
+            func() error {
+                t.Errorf("BuildFunc should not execute")
+                return nil
+            },
+        }
+    }
+
+    runCmd :=func(command string, args ...string) func(t *testing.T) RunFunc {
+        return func(t *testing.T) RunFunc {
+            return RunCommand(command, args...)
+        }
+    }
+    runErr := func(t *testing.T) RunFunc {
+        return func() (func(), error) {
+            t.Errorf("RunFunc should not execute")
+            return func(){}, nil
+        }
+    }
+
+    type testCase struct {
+        build func(*testing.T) []BuildFunc
+        run func(*testing.T) RunFunc
+        err bool
+    }
+    for name, tc := range map[string]testCase {
+        "ok": {
+            build: buildCmd("echo", "ok"),
+            run: runCmd("tail", ""),
+            err: false,
+        },
+        "build error": {
+            build: buildCmd("exit", "1"),
+            run: runErr,
+            err: true,
+        },
+        "build chain error": {
+            build: buildErr,
+            run: runErr,
+            err: true,
+        },
+        "empty run": {
+            build: buildCmd("echo", "empty run"),
+            err: false,
+        },
+        "run build": {
+            run: runCmd("exit", "1"),
+            err: true,
+        },
+    } {
+        t.Run(name, func(t *testing.T) {
+
+            var build []BuildFunc
+            var run RunFunc
+
+            if tc.build != nil {
+                build = tc.build(t)
+            }
+            if tc.run != nil {
+                run = tc.run(t)
+            }
+
+            stop, err := Run(build, run)
+			if err != nil {
+				if !tc.err {
+					t.Errorf("Run() err = %v; wanted no errors", err)
+				}
+				return
+			}
+            if tc.err {
+                t.Errorf("Run() err should not be nil")
+            }
+            stop()
+        })
+    }
+}
