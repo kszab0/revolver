@@ -86,8 +86,8 @@ func BuildCommand(command string, args ...string) BuildFunc {
 		cmd := exec.Command(command, args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		if err := cmd.Start(); err != nil {
-			return fmt.Errorf("Error running: \"%s %s\": %w", command, strings.Join(args, ""), err)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("Error executing build func: \"%s %s\": %w", command, strings.Join(args, ""), err)
 		}
 		return nil
 	}
@@ -105,7 +105,7 @@ func RunCommand(command string, args ...string) RunFunc {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Start(); err != nil {
-			return nil, fmt.Errorf("Error running: \"%s %s\": %w", command, strings.Join(args, " "), err)
+			return nil, fmt.Errorf("Error executing run func: \"%s %s\": %w", command, strings.Join(args, " "), err)
 		}
 		stop := func() {
 			cmd.Process.Kill()
