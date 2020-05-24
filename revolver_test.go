@@ -333,7 +333,7 @@ func TestFilter(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			changed := Filter(tc.files, tc.includes, tc.excludes)()
+			changed := Filter(tc.includes, tc.excludes)(tc.files)
 			if changed != tc.changed {
 				t.Errorf("Filter() should return %v; got: %v", tc.changed, changed)
 			}
