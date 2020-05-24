@@ -2,12 +2,15 @@ package revolver
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/bmatcuk/doublestar"
+	"gopkg.in/yaml.v2"
 )
 
 func matchPatterns(patterns []string, name string) bool {
@@ -131,18 +134,83 @@ func Run(builds []BuildFunc, run RunFunc) (func(), error) {
 // FilterFunc can filter files.
 type FilterFunc func() bool
 
-// Filter returns a FilterFunc that can filter files based on include and 
+// Filter returns a FilterFunc that can filter files based on include and
 // exclude patterns.
 func Filter(files, includePatterns, excludePatterns []string) FilterFunc {
-    return func() bool {
-        for _, file := range files {
-            if matchPatterns(excludePatterns, file) {
-                continue
-            }
-            if matchPatterns(includePatterns, file) {
-                return true
-            }
-        }
-        return false
-    }
+	return func() bool {
+		for _, file := range files {
+			if matchPatterns(excludePatterns, file) {
+				continue
+			}
+			if matchPatterns(includePatterns, file) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+type Action struct {
+	Name            string   `yaml:"name,omitempty"`
+	Patterns        []string `yaml:"patterns,omitempty"`
+	ExcludePatterns []string `yaml:"exclude,omitempty"`
+	BuildCommands   []string `yaml:"build,omitempty"`
+	RunCommand      string   `yaml:"run,omitempty"`
+}
+
+type Config struct {
+	Dir         string        `yaml:"dir,omitempty"`
+	ExcludeDirs []string      `yaml:"excludeDirs,omitempty"`
+	Interval    time.Duration `yaml:"interval,omitempty"`
+	Actions     []Action      `yaml:"actions"`
+}
+
+func (config *Config) validate() error {
+	if config.Actions == nil || len(config.Actions) == 0 {
+		return fmt.Errorf("config should have at least one action")
+	}
+	for _, action := range config.Actions {
+		if ((action.BuildCommands == nil) || (len(action.BuildCommands) == 0)) && action.RunCommand == "" {
+			return fmt.Errorf("every action should have at least one run or build command")
+		}
+	}
+	return nil
+}
+
+func (config *Config) setDefaults() {
+	if config.Dir == "" {
+		config.Dir = "."
+	}
+	if config.Interval == 0 {
+		config.Interval = 500 * time.Millisecond
+	}
+	for i := 0; i < len(config.Actions); i++ {
+		if config.Actions[i].Patterns == nil || len(config.Actions[i].Patterns) == 0 {
+			config.Actions[i].Patterns = []string{"**/*"}
+		}
+	}
+}
+
+func ParseConfigFile(path string) (*Config, error) {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConfig(content)
+}
+
+func ParseConfig(content []byte) (*Config, error) {
+	config := &Config{}
+
+	if err := yaml.Unmarshal(content, config); err != nil {
+		return nil, fmt.Errorf("Error parsing config: %w", err)
+	}
+
+	if err := config.validate(); err != nil {
+		return nil, fmt.Errorf("Error validating config: %w", err)
+	}
+
+	config.setDefaults()
+
+	return config, nil
 }

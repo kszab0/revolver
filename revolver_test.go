@@ -177,8 +177,8 @@ func TestDetect(t *testing.T) {
 			detect := Detect(dir, nil)
 			detect()
 
-            df := filepath.Join(dirs, file)
-            os.Remove(df)
+			df := filepath.Join(dirs, file)
+			os.Remove(df)
 
 			expected := []string{relative(t, dir, df)}
 			return expected, detect
@@ -217,126 +217,252 @@ func TestDetect(t *testing.T) {
 }
 
 func TestRun(t *testing.T) {
-    buildCmd := func(command string, args ...string) func(t *testing.T) []BuildFunc {
-        return func(t *testing.T) []BuildFunc {
-            return []BuildFunc{BuildCommand(command, args...)}
-        }
-    }
-    buildErr := func(t *testing.T) []BuildFunc {
-        return []BuildFunc{
-            BuildCommand("exit", "1"),
-            func() error {
-                t.Errorf("BuildFunc should not execute")
-                return nil
-            },
-        }
-    }
+	buildCmd := func(command string, args ...string) func(t *testing.T) []BuildFunc {
+		return func(t *testing.T) []BuildFunc {
+			return []BuildFunc{BuildCommand(command, args...)}
+		}
+	}
+	buildErr := func(t *testing.T) []BuildFunc {
+		return []BuildFunc{
+			BuildCommand("exit", "1"),
+			func() error {
+				t.Errorf("BuildFunc should not execute")
+				return nil
+			},
+		}
+	}
 
-    runCmd :=func(command string, args ...string) func(t *testing.T) RunFunc {
-        return func(t *testing.T) RunFunc {
-            return RunCommand(command, args...)
-        }
-    }
-    runErr := func(t *testing.T) RunFunc {
-        return func() (func(), error) {
-            t.Errorf("RunFunc should not execute")
-            return func(){}, nil
-        }
-    }
+	runCmd := func(command string, args ...string) func(t *testing.T) RunFunc {
+		return func(t *testing.T) RunFunc {
+			return RunCommand(command, args...)
+		}
+	}
+	runErr := func(t *testing.T) RunFunc {
+		return func() (func(), error) {
+			t.Errorf("RunFunc should not execute")
+			return func() {}, nil
+		}
+	}
 
-    type testCase struct {
-        build func(*testing.T) []BuildFunc
-        run func(*testing.T) RunFunc
-        err bool
-    }
-    for name, tc := range map[string]testCase {
-        "ok": {
-            build: buildCmd("echo", "ok"),
-            run: runCmd("tail", ""),
-            err: false,
-        },
-        "build error": {
-            build: buildCmd("exit", "1"),
-            run: runErr,
-            err: true,
-        },
-        "build chain error": {
-            build: buildErr,
-            run: runErr,
-            err: true,
-        },
-        "empty run": {
-            build: buildCmd("echo", "empty run"),
-            err: false,
-        },
-        "run build": {
-            run: runCmd("exit", "1"),
-            err: true,
-        },
-    } {
-        t.Run(name, func(t *testing.T) {
+	type testCase struct {
+		build func(*testing.T) []BuildFunc
+		run   func(*testing.T) RunFunc
+		err   bool
+	}
+	for name, tc := range map[string]testCase{
+		"ok": {
+			build: buildCmd("echo", "ok"),
+			run:   runCmd("tail", ""),
+			err:   false,
+		},
+		"build error": {
+			build: buildCmd("exit", "1"),
+			run:   runErr,
+			err:   true,
+		},
+		"build chain error": {
+			build: buildErr,
+			run:   runErr,
+			err:   true,
+		},
+		"empty run": {
+			build: buildCmd("echo", "empty run"),
+			err:   false,
+		},
+		"run build": {
+			run: runCmd("exit", "1"),
+			err: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
 
-            var build []BuildFunc
-            var run RunFunc
+			var build []BuildFunc
+			var run RunFunc
 
-            if tc.build != nil {
-                build = tc.build(t)
-            }
-            if tc.run != nil {
-                run = tc.run(t)
-            }
+			if tc.build != nil {
+				build = tc.build(t)
+			}
+			if tc.run != nil {
+				run = tc.run(t)
+			}
 
-            stop, err := Run(build, run)
+			stop, err := Run(build, run)
 			if err != nil {
 				if !tc.err {
 					t.Errorf("Run() err = %v; wanted no errors", err)
 				}
 				return
 			}
-            if tc.err {
-                t.Errorf("Run() err should not be nil")
-            }
-            stop()
-        })
-    }
+			if tc.err {
+				t.Errorf("Run() err should not be nil")
+			}
+			stop()
+		})
+	}
 }
 
 func TestFilter(t *testing.T) {
-    type testCase struct {
-        files, includes, excludes []string
-        changed bool
-    }
-    for name, tc := range map[string]testCase {
-        "empty": {
-            files: []string{},
-            includes: []string{},
-            excludes: []string{},
-            changed: false,
-        },
-        "include all, no excludes": {
-            files: []string{"file.go", "file_test.go"},
-            includes: []string{"*"},
-            excludes: []string{},
-            changed: true,
-        },
-        "exclude included": {
-            files: []string{"file.go", "file_test.go"},
-            includes: []string{"*.go"},
-            excludes: []string{"*.go"},
-            changed: false,
-        },
-        "exclude _test.go files": {
-            files: []string{"file.go", "file_test.go"},
-            includes: []string{"*"},
-            excludes: []string{"*_test.go"},
-            changed: true,
-        },
-    } {
-        t.Run(name, func(t *testing.T) {
-            changed := Filter(tc.files, tc.includes, tc.excludes)()
-            if changed != tc.changed {
-                t.Errorf("Filter() should return %v; got: %v", tc.changed, changed)
-            }
-        })
-    }
+	type testCase struct {
+		files, includes, excludes []string
+		changed                   bool
+	}
+	for name, tc := range map[string]testCase{
+		"empty": {
+			files:    []string{},
+			includes: []string{},
+			excludes: []string{},
+			changed:  false,
+		},
+		"include all, no excludes": {
+			files:    []string{"file.go", "file_test.go"},
+			includes: []string{"*"},
+			excludes: []string{},
+			changed:  true,
+		},
+		"exclude included": {
+			files:    []string{"file.go", "file_test.go"},
+			includes: []string{"*.go"},
+			excludes: []string{"*.go"},
+			changed:  false,
+		},
+		"exclude _test.go files": {
+			files:    []string{"file.go", "file_test.go"},
+			includes: []string{"*"},
+			excludes: []string{"*_test.go"},
+			changed:  true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			changed := Filter(tc.files, tc.includes, tc.excludes)()
+			if changed != tc.changed {
+				t.Errorf("Filter() should return %v; got: %v", tc.changed, changed)
+			}
+		})
+	}
+}
+
+func TestParseConfig(t *testing.T) {
+	equals := func(a, b Config) bool {
+		if a.Dir != b.Dir ||
+			len(a.ExcludeDirs) != len(b.ExcludeDirs) ||
+			a.Interval != b.Interval ||
+			len(a.Actions) != len(b.Actions) {
+			return false
+		}
+		for i := 0; i < len(a.Actions); i++ {
+			actionA := a.Actions[i]
+			actionB := b.Actions[i]
+
+			if actionA.Name != actionB.Name ||
+				len(actionA.Patterns) != len(actionB.Patterns) ||
+				len(actionA.ExcludePatterns) != len(actionB.ExcludePatterns) ||
+				len(actionA.BuildCommands) != len(actionB.BuildCommands) ||
+				actionA.RunCommand != actionB.RunCommand {
+				return false
+			}
+			for i := 0; i < len(actionA.Patterns); i++ {
+				if actionA.Patterns[i] != actionB.Patterns[i] {
+					return false
+				}
+			}
+			for i := 0; i < len(actionB.ExcludePatterns); i++ {
+				if actionA.ExcludePatterns[i] != actionB.ExcludePatterns[i] {
+					return false
+				}
+			}
+			for i := 0; i < len(actionA.BuildCommands); i++ {
+				if actionA.BuildCommands[i] != actionB.BuildCommands[i] {
+					return false
+				}
+			}
+		}
+		for i := 0; i < len(a.ExcludeDirs); i++ {
+			if a.ExcludeDirs[i] != b.ExcludeDirs[i] {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	type testCase struct {
+		content string
+		config  Config
+		err     bool
+	}
+	for name, tc := range map[string]testCase{
+		"no action": {
+			content: ``,
+			err:     true,
+		},
+		"no command": {
+			content: `actions:
+  - name: "action"`,
+			err: true,
+		},
+		"maleformed": {
+			content: `actions: "maleformed"`,
+			err:     true,
+		},
+		"minimal": {
+			content: `actions:
+  - build: ["echo ok"]`,
+			config: Config{
+				Dir:      ".",
+				Interval: 500 * time.Millisecond,
+				Actions: []Action{
+					{
+						Patterns:      []string{"**/*"},
+						BuildCommands: []string{"echo ok"},
+					},
+				},
+			},
+			err: false,
+		},
+		"full": {
+			content: `dir: "dir"
+excludeDirs: ["exclude"]
+interval: 1s
+actions:
+  - name: "action"
+    patterns: ["**/*.go"]
+    exclude: ["**/*_test.go"]
+    build: ["echo build"]
+    run: "echo run"`,
+			config: Config{
+				Dir:         "dir",
+				ExcludeDirs: []string{"exclude"},
+				Interval:    1 * time.Second,
+				Actions: []Action{
+					{
+						Name:            "action",
+						Patterns:        []string{"**/*.go"},
+						ExcludePatterns: []string{"**/*_test.go"},
+						BuildCommands:   []string{"echo build"},
+						RunCommand:      "echo run",
+					},
+				},
+			},
+			err: false,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			config, err := ParseConfig([]byte(tc.content))
+			if err != nil {
+				if !tc.err {
+					t.Errorf("ParseConfig() err should be nil; got: %v", err)
+				}
+				return
+			}
+
+			if tc.err {
+				t.Errorf("ParseConfig() err should be %v; got: nil", err)
+				return
+			}
+
+			if !equals(*config, tc.config) {
+				t.Errorf("ParseConfig() should be %v; got: %v", tc.config, config)
+			}
+		})
+	}
 }
