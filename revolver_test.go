@@ -296,7 +296,10 @@ func TestRun(t *testing.T) {
 			if tc.err {
 				t.Errorf("Run() err should not be nil")
 			}
-			stop()
+
+			if stop != nil {
+				stop()
+			}
 		})
 	}
 }
@@ -462,6 +465,117 @@ actions:
 
 			if !equals(*config, tc.config) {
 				t.Errorf("ParseConfig() should be %v; got: %v", tc.config, config)
+			}
+		})
+	}
+}
+
+func TestParseActions(t *testing.T) {
+	type testAction struct {
+		id         string
+		name       string
+		buildFuncs int
+		runFunc    bool
+	}
+	equals := func(a action, b testAction) bool {
+		if a.ID != b.id ||
+			a.Name != b.name ||
+			len(a.BuildFuncs) != b.buildFuncs {
+			return false
+		}
+		if b.runFunc {
+			if a.RunFunc == nil {
+				return false
+			}
+		} else {
+			if a.RunFunc != nil {
+				return false
+			}
+		}
+		return true
+	}
+	type testCase struct {
+		actions  []Action
+		expected []testAction
+	}
+	for name, tc := range map[string]testCase{
+		"without name": {
+			actions: []Action{
+				{},
+			},
+			expected: []testAction{
+				{id: "1"},
+			},
+		},
+		"multiple without name": {
+			actions: []Action{
+				{}, {}, {},
+			},
+			expected: []testAction{
+				{id: "1"}, {id: "2"}, {id: "3"},
+			},
+		},
+		"with name": {
+			actions: []Action{
+				{Name: "name"},
+			},
+			expected: []testAction{
+				{id: "name", name: "name"},
+			},
+		},
+		"duplicate with name": {
+			actions: []Action{
+				{Name: "name"},
+				{Name: "name"},
+			},
+			expected: []testAction{
+				{id: "name", name: "name"},
+				{id: "name-2", name: "name"},
+			},
+		},
+		"mixed with and without name": {
+			actions: []Action{
+				{Name: "name"},
+				{},
+				{Name: "name"},
+				{Name: "asdf"},
+				{},
+			},
+			expected: []testAction{
+				{id: "name", name: "name"},
+				{id: "2"},
+				{id: "name-3", name: "name"},
+				{id: "asdf", name: "asdf"},
+				{id: "5"},
+			},
+		},
+		"build funcs": {
+			actions: []Action{
+				{BuildCommands: []string{"echo asdf", "echo asdf"}},
+			},
+			expected: []testAction{
+				{id: "1", buildFuncs: 2},
+			},
+		},
+		"run func": {
+			actions: []Action{
+				{RunCommand: "echo asdf"},
+			},
+			expected: []testAction{
+				{id: "1", runFunc: true},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			actions := parseActions(tc.actions)
+			if len(actions) != len(tc.expected) {
+				t.Errorf("Actions length should be: %v; got: %v", len(tc.expected), len(actions))
+				return
+			}
+			for i := 0; i < len(actions); i++ {
+				if !equals(actions[i], tc.expected[i]) {
+					t.Errorf("Action should be: %v; got: %v", actions[i], tc.expected[i])
+				}
 			}
 		})
 	}

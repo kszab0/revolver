@@ -125,7 +125,8 @@ func Run(builds []BuildFunc, run RunFunc) (func(), error) {
 	}
 
 	if run == nil {
-		return func() {}, nil
+		//return func() {}, nil
+		return nil, nil
 	}
 
 	return run()
@@ -213,4 +214,91 @@ func ParseConfig(content []byte) (*Config, error) {
 	config.setDefaults()
 
 	return config, nil
+}
+
+func parseCommand(command string) (string, []string) {
+	parts := strings.Split(command, " ")
+	return parts[0], parts[1:]
+}
+
+type action struct {
+	ID         string
+	Name       string
+	Filter     FilterFunc
+	BuildFuncs []BuildFunc
+	RunFunc    RunFunc
+}
+
+func parseActions(config []Action) []action {
+	ids := make(map[string]struct{})
+
+	actions := []action{}
+	for i, a := range config {
+		builds := []BuildFunc{}
+		for _, command := range a.BuildCommands {
+			cmd, args := parseCommand(command)
+			builds = append(builds, BuildCommand(cmd, args...))
+		}
+
+		var run RunFunc
+		if a.RunCommand != "" {
+			cmd, args := parseCommand(a.RunCommand)
+			run = RunCommand(cmd, args...)
+		}
+
+		id := a.Name
+		if id == "" {
+			id = fmt.Sprintf("%d", i+1)
+		} else if _, ok := ids[a.Name]; ok {
+			id = fmt.Sprintf("%s-%d", a.Name, i+1)
+		}
+		ids[a.Name] = struct{}{}
+
+		actions = append(actions, action{
+			ID:         id,
+			Name:       a.Name,
+			Filter:     Filter(a.Patterns, a.ExcludePatterns),
+			BuildFuncs: builds,
+			RunFunc:    run,
+		})
+	}
+	return actions
+}
+
+// Watch runs commands based on file changes.
+func Watch(config Config) error {
+	detect := Detect(config.Dir, config.ExcludeDirs)
+
+	actions := parseActions(config.Actions)
+
+	var err error
+	stopFuncs := make(map[string]func())
+
+	for {
+		changes := detect()
+		if len(changes) == 0 {
+			time.Sleep(config.Interval)
+			continue
+		}
+
+		for _, action := range actions {
+			if ok := action.Filter(changes); !ok {
+				continue
+			}
+
+			if stop, ok := stopFuncs[action.ID]; ok && stop != nil {
+				stop()
+				fmt.Printf("[%s] Stopping...\n", action.ID)
+			}
+
+			stopFuncs[action.ID], err = Run(action.BuildFuncs, action.RunFunc)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			fmt.Printf("[%s] Built successfully.\n", action.ID)
+		}
+
+		time.Sleep(config.Interval)
+	}
 }
