@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar"
+	"github.com/logrusorgru/aurora"
 	"gopkg.in/yaml.v2"
 )
 
@@ -151,6 +152,7 @@ func Filter(includePatterns, excludePatterns []string) FilterFunc {
 	}
 }
 
+// Action is a block in a Config file
 type Action struct {
 	Name            string   `yaml:"name,omitempty"`
 	Patterns        []string `yaml:"patterns,omitempty"`
@@ -159,6 +161,7 @@ type Action struct {
 	RunCommand      string   `yaml:"run,omitempty"`
 }
 
+// Config holds all the configuration for running revolver.
 type Config struct {
 	Dir         string        `yaml:"dir,omitempty"`
 	ExcludeDirs []string      `yaml:"excludeDirs,omitempty"`
@@ -192,6 +195,7 @@ func (config *Config) setDefaults() {
 	}
 }
 
+// ParseConfigFile parses a Config from a yaml file
 func ParseConfigFile(path string) (*Config, error) {
 	content, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -200,6 +204,8 @@ func ParseConfigFile(path string) (*Config, error) {
 	return ParseConfig(content)
 }
 
+// ParseConfig parses a Config from a yaml file's content,
+// validates it and sets the default values
 func ParseConfig(content []byte) (*Config, error) {
 	config := &Config{}
 
@@ -288,17 +294,29 @@ func Watch(config Config) error {
 
 			if stop, ok := stopFuncs[action.ID]; ok && stop != nil {
 				stop()
-				fmt.Printf("[%s] Stopping...\n", action.ID)
+				printInfo("[%s] Stopping...", action.ID)
 			}
 
 			stopFuncs[action.ID], err = Run(action.BuildFuncs, action.RunFunc)
 			if err != nil {
-				fmt.Println(err)
+				printErr(err)
 				continue
 			}
-			fmt.Printf("[%s] Built successfully.\n", action.ID)
+			printSuccess("[%s] Built successfully.", action.ID)
 		}
 
 		time.Sleep(config.Interval)
 	}
+}
+
+func printSuccess(msg string, args ...interface{}) {
+	fmt.Println(aurora.Sprintf(aurora.Green(msg), args...))
+}
+
+func printInfo(msg string, args ...interface{}) {
+	fmt.Println(aurora.Sprintf(aurora.Yellow(msg), args...))
+}
+
+func printErr(err error, args ...interface{}) {
+	fmt.Println(aurora.Sprintf(aurora.Red(err), args...))
 }
