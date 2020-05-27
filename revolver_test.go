@@ -398,20 +398,20 @@ func TestParseConfig(t *testing.T) {
 			content: ``,
 			err:     true,
 		},
-		"no action": {
+		"config: no action": {
 			content: `action:`,
 			err:     true,
 		},
-		"maleformed action": {
+		"config: maleformed action": {
 			content: `action: "maleformed"`,
 			err:     true,
 		},
-		"no command": {
+		"config: no command": {
 			content: `action:
   - name: "action"`,
 			err: true,
 		},
-		"minimal": {
+		"config: minimal": {
 			content: `action:
   - build: ["echo ok"]`,
 			config: Config{
@@ -426,7 +426,7 @@ func TestParseConfig(t *testing.T) {
 			},
 			err: false,
 		},
-		"full": {
+		"config: full": {
 			content: `dir: "dir"
 excludeDir: ["exclude"]
 interval: 1s
@@ -452,7 +452,7 @@ action:
 			},
 			err: false,
 		},
-		"without arrays": {
+		"config: without arrays": {
 			content: `excludeDir: "exclude"
 action:
   - pattern: "**/*.go"
@@ -467,6 +467,43 @@ action:
 						Patterns:        []string{"**/*.go"},
 						ExcludePatterns: []string{"**/*_test.go"},
 						BuildCommands:   []string{"echo build"},
+					},
+				},
+			},
+			err: false,
+		},
+		"simple: minimal": {
+			content: `build: ["echo ok"]`,
+			config: Config{
+				Dir:      ".",
+				Interval: 500 * time.Millisecond,
+				Actions: []Action{
+					{
+						Patterns:      []string{"**/*"},
+						BuildCommands: []string{"echo ok"},
+					},
+				},
+			},
+			err: false,
+		},
+		"simple: full": {
+			content: `dir: "dir"
+excludeDir: ["exclude"]
+interval: 1s
+pattern: ["**/*.go"]
+exclude: ["**/*_test.go"]
+build: ["echo build"]
+run: "echo run"`,
+			config: Config{
+				Dir:         "dir",
+				ExcludeDirs: []string{"exclude"},
+				Interval:    1 * time.Second,
+				Actions: []Action{
+					{
+						Patterns:        []string{"**/*.go"},
+						ExcludePatterns: []string{"**/*_test.go"},
+						BuildCommands:   []string{"echo build"},
+						RunCommand:      "echo run",
 					},
 				},
 			},

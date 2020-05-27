@@ -212,22 +212,59 @@ func (config *Config) setDefaults() {
 	}
 }
 
-// ParseConfigFile parses a Config from a yaml file
-func ParseConfigFile(path string) (*Config, error) {
-	content, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
+type simpleConfig struct {
+	Dir         string        `yaml:"dir,omitempty"`
+	ExcludeDirs stringArr     `yaml:"excludeDir,omitempty"`
+	Interval    time.Duration `yaml:"interval,omitempty"`
+
+	Patterns        stringArr `yaml:"pattern,omitempty"`
+	ExcludePatterns stringArr `yaml:"exclude,omitempty"`
+	BuildCommands   stringArr `yaml:"build,omitempty"`
+	RunCommand      string    `yaml:"run,omitempty"`
+}
+
+func parseSimpleConfig(content []byte) (*Config, error) {
+	config := &simpleConfig{}
+
+	if err := yaml.UnmarshalStrict(content, config); err != nil {
+		return nil, fmt.Errorf("Error parsing config: %w", err)
 	}
-	return ParseConfig(content)
+
+	return &Config{
+		Dir:         config.Dir,
+		ExcludeDirs: config.ExcludeDirs,
+		Interval:    config.Interval,
+		Actions: []Action{
+			{
+				Patterns:        config.Patterns,
+				ExcludePatterns: config.ExcludePatterns,
+				BuildCommands:   config.BuildCommands,
+				RunCommand:      config.RunCommand,
+			},
+		},
+	}, nil
+}
+
+func parseConfig(content []byte) (*Config, error) {
+	config := &Config{}
+
+	if err := yaml.Unmarshal(content, config); err != nil {
+		return nil, fmt.Errorf("Error parsing config: %w", err)
+	}
+
+	return config, nil
 }
 
 // ParseConfig parses a Config from a yaml file's content,
 // validates it and sets the default values
 func ParseConfig(content []byte) (*Config, error) {
-	config := &Config{}
 
-	if err := yaml.Unmarshal(content, config); err != nil {
-		return nil, fmt.Errorf("Error parsing config: %w", err)
+	config, err := parseSimpleConfig(content)
+	if err != nil {
+		config, err = parseConfig(content)
+		if err != nil {
+			return nil, fmt.Errorf("Error parsing config: %w", err)
+		}
 	}
 
 	if err := config.validate(); err != nil {
@@ -237,6 +274,15 @@ func ParseConfig(content []byte) (*Config, error) {
 	config.setDefaults()
 
 	return config, nil
+}
+
+// ParseConfigFile parses a Config from a yaml file
+func ParseConfigFile(path string) (*Config, error) {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConfig(content)
 }
 
 func parseCommand(command string) (string, []string) {
