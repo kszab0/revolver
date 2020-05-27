@@ -1,6 +1,7 @@
 package revolver
 
 import (
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -169,6 +170,20 @@ func (s *stringArr) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
+func (s *stringArr) String() string {
+	out := "["
+	for _, o := range *s {
+		out = fmt.Sprintf("%s %s", out, o)
+	}
+	out = fmt.Sprintf("%s ]", out)
+	return out
+}
+
+func (s *stringArr) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
+
 // Action is a block in a Config file
 type Action struct {
 	Name            string    `yaml:"name,omitempty"`
@@ -245,25 +260,82 @@ func parseSimpleConfig(content []byte) (*Config, error) {
 	}, nil
 }
 
-func parseConfig(content []byte) (*Config, error) {
+func parseNormalConfig(content []byte) (*Config, error) {
 	config := &Config{}
 
-	if err := yaml.Unmarshal(content, config); err != nil {
+	if err := yaml.UnmarshalStrict(content, config); err != nil {
 		return nil, fmt.Errorf("Error parsing config: %w", err)
 	}
 
 	return config, nil
 }
 
-// ParseConfig parses a Config from a yaml file's content,
+// parseConfig parses a Config from a yaml file's content,
 // validates it and sets the default values
-func ParseConfig(content []byte) (*Config, error) {
+func parseConfig(content []byte) (*Config, error) {
 
 	config, err := parseSimpleConfig(content)
 	if err != nil {
-		config, err = parseConfig(content)
+		config, err = parseNormalConfig(content)
 		if err != nil {
 			return nil, fmt.Errorf("Error parsing config: %w", err)
+		}
+	}
+
+	return config, nil
+}
+
+// parseConfigFile parses a Config from a yaml file
+func parseConfigFile(path string) (*Config, error) {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return parseConfig(content)
+}
+
+// ParseFlags parses a Config from command line flags, validates it and sets
+// the default values. If no build(b) or run(r) flags are found it will parse the
+// config from a yaml file based on the configFile(c) flag.
+func ParseFlags(args []string) (*Config, error) {
+	var (
+		configFile, dir, runCommand                           string
+		interval                                              time.Duration
+		excludeDirs, patterns, excludePatterns, buildCommands stringArr
+	)
+	flags := flag.NewFlagSet(args[0], flag.ExitOnError)
+	flags.StringVar(&configFile, "c", "revolver.yml", "Path to config file")
+	flags.StringVar(&dir, "d", "", "Directory to watch")
+	flags.Var(&excludeDirs, "ed", "Excluded directories")
+	flags.DurationVar(&interval, "i", 0, "Poll interval")
+	flags.Var(&patterns, "p", "File watch patterns")
+	flags.Var(&excludePatterns, "e", "File watch exclude patterns")
+	flags.Var(&buildCommands, "b", "Build commands")
+	flags.StringVar(&runCommand, "r", "", "Run command")
+	if err := flags.Parse(args[1:]); err != nil {
+		return nil, err
+	}
+
+	var config *Config
+	if (buildCommands != nil && len(buildCommands) > 0) || runCommand != "" {
+		config = &Config{
+			Dir:         dir,
+			ExcludeDirs: excludeDirs,
+			Interval:    interval,
+			Actions: []Action{
+				{
+					Patterns:        patterns,
+					ExcludePatterns: excludePatterns,
+					BuildCommands:   buildCommands,
+					RunCommand:      runCommand,
+				},
+			},
+		}
+	} else {
+		var err error
+		config, err = parseConfigFile(configFile)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -274,15 +346,6 @@ func ParseConfig(content []byte) (*Config, error) {
 	config.setDefaults()
 
 	return config, nil
-}
-
-// ParseConfigFile parses a Config from a yaml file
-func ParseConfigFile(path string) (*Config, error) {
-	content, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	return ParseConfig(content)
 }
 
 func parseCommand(command string) (string, []string) {

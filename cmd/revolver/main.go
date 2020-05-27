@@ -1,19 +1,15 @@
 package main
 
 import (
-	"flag"
+	"os"
 
 	"github.com/kszab0/revolver"
 )
 
 func main() {
-	configPath := flag.String("c", "revolver.yml", "Path to config file")
-	flag.Parse()
-
-	config, err := revolver.ParseConfigFile(*configPath)
+	config, err := revolver.ParseFlags(os.Args)
 	if err != nil {
 		panic(err)
 	}
-
 	revolver.Watch(*config)
 }

@@ -344,82 +344,66 @@ func TestFilter(t *testing.T) {
 	}
 }
 
-func TestParseConfig(t *testing.T) {
-	equals := func(a, b Config) bool {
-		if a.Dir != b.Dir ||
-			len(a.ExcludeDirs) != len(b.ExcludeDirs) ||
-			a.Interval != b.Interval ||
-			len(a.Actions) != len(b.Actions) {
+func configEquals(a, b Config) bool {
+	if a.Dir != b.Dir ||
+		len(a.ExcludeDirs) != len(b.ExcludeDirs) ||
+		a.Interval != b.Interval ||
+		len(a.Actions) != len(b.Actions) {
+		return false
+	}
+	for i := 0; i < len(a.Actions); i++ {
+		actionA := a.Actions[i]
+		actionB := b.Actions[i]
+
+		if actionA.Name != actionB.Name ||
+			len(actionA.Patterns) != len(actionB.Patterns) ||
+			len(actionA.ExcludePatterns) != len(actionB.ExcludePatterns) ||
+			len(actionA.BuildCommands) != len(actionB.BuildCommands) ||
+			actionA.RunCommand != actionB.RunCommand {
 			return false
 		}
-		for i := 0; i < len(a.Actions); i++ {
-			actionA := a.Actions[i]
-			actionB := b.Actions[i]
-
-			if actionA.Name != actionB.Name ||
-				len(actionA.Patterns) != len(actionB.Patterns) ||
-				len(actionA.ExcludePatterns) != len(actionB.ExcludePatterns) ||
-				len(actionA.BuildCommands) != len(actionB.BuildCommands) ||
-				actionA.RunCommand != actionB.RunCommand {
-				return false
-			}
-			for i := 0; i < len(actionA.Patterns); i++ {
-				if actionA.Patterns[i] != actionB.Patterns[i] {
-					return false
-				}
-			}
-			for i := 0; i < len(actionB.ExcludePatterns); i++ {
-				if actionA.ExcludePatterns[i] != actionB.ExcludePatterns[i] {
-					return false
-				}
-			}
-			for i := 0; i < len(actionA.BuildCommands); i++ {
-				if actionA.BuildCommands[i] != actionB.BuildCommands[i] {
-					return false
-				}
-			}
-		}
-		for i := 0; i < len(a.ExcludeDirs); i++ {
-			if a.ExcludeDirs[i] != b.ExcludeDirs[i] {
+		for i := 0; i < len(actionA.Patterns); i++ {
+			if actionA.Patterns[i] != actionB.Patterns[i] {
 				return false
 			}
 		}
-
-		return true
+		for i := 0; i < len(actionB.ExcludePatterns); i++ {
+			if actionA.ExcludePatterns[i] != actionB.ExcludePatterns[i] {
+				return false
+			}
+		}
+		for i := 0; i < len(actionA.BuildCommands); i++ {
+			if actionA.BuildCommands[i] != actionB.BuildCommands[i] {
+				return false
+			}
+		}
+	}
+	for i := 0; i < len(a.ExcludeDirs); i++ {
+		if a.ExcludeDirs[i] != b.ExcludeDirs[i] {
+			return false
+		}
 	}
 
+	return true
+}
+
+func TestParseConfig(t *testing.T) {
 	type testCase struct {
 		content string
 		config  Config
 		err     bool
 	}
 	for name, tc := range map[string]testCase{
-		"empty": {
-			content: ``,
-			err:     true,
-		},
-		"config: no action": {
-			content: `action:`,
-			err:     true,
-		},
 		"config: maleformed action": {
 			content: `action: "maleformed"`,
 			err:     true,
-		},
-		"config: no command": {
-			content: `action:
-  - name: "action"`,
-			err: true,
 		},
 		"config: minimal": {
 			content: `action:
   - build: ["echo ok"]`,
 			config: Config{
-				Dir:      ".",
-				Interval: 500 * time.Millisecond,
 				Actions: []Action{
 					{
-						Patterns:      []string{"**/*"},
 						BuildCommands: []string{"echo ok"},
 					},
 				},
@@ -459,9 +443,7 @@ action:
     exclude: "**/*_test.go"
     build: "echo build"`,
 			config: Config{
-				Dir:         ".",
 				ExcludeDirs: []string{"exclude"},
-				Interval:    500 * time.Millisecond,
 				Actions: []Action{
 					{
 						Patterns:        []string{"**/*.go"},
@@ -475,11 +457,8 @@ action:
 		"simple: minimal": {
 			content: `build: ["echo ok"]`,
 			config: Config{
-				Dir:      ".",
-				Interval: 500 * time.Millisecond,
 				Actions: []Action{
 					{
-						Patterns:      []string{"**/*"},
 						BuildCommands: []string{"echo ok"},
 					},
 				},
@@ -511,7 +490,7 @@ run: "echo run"`,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			config, err := ParseConfig([]byte(tc.content))
+			config, err := parseConfig([]byte(tc.content))
 			if err != nil {
 				if !tc.err {
 					t.Errorf("ParseConfig() err should be nil; got: %v", err)
@@ -523,8 +502,120 @@ run: "echo run"`,
 				return
 			}
 
-			if !equals(*config, tc.config) {
+			if !configEquals(*config, tc.config) {
 				t.Errorf("ParseConfig() should be %v; got: %v", tc.config, config)
+			}
+		})
+	}
+}
+
+func TestParseFlags(t *testing.T) {
+	type testCase struct {
+		args   []string
+		config Config
+		err    bool
+	}
+	for name, tc := range map[string]testCase{
+		"single build command": {
+			args: []string{"revolver", "-b", "echo 1"},
+			config: Config{
+				Dir:      ".",
+				Interval: 500 * time.Millisecond,
+				Actions: []Action{
+					{
+						Patterns:      []string{"**/*"},
+						BuildCommands: []string{"echo 1"},
+					},
+				},
+			},
+		},
+		"multiple build command": {
+			args: []string{"revolver", "-b", "echo 1", "-b", "echo 2"},
+			config: Config{
+				Dir:      ".",
+				Interval: 500 * time.Millisecond,
+				Actions: []Action{
+					{
+						Patterns:      []string{"**/*"},
+						BuildCommands: []string{"echo 1", "echo 2"},
+					},
+				},
+			},
+		},
+		"run command": {
+			args: []string{"revolver", "-r", "echo 1"},
+			config: Config{
+				Dir:      ".",
+				Interval: 500 * time.Millisecond,
+				Actions: []Action{
+					{
+						Patterns:   []string{"**/*"},
+						RunCommand: "echo 1",
+					},
+				},
+			},
+		},
+		"full": {
+			args: []string{"revolver", "-d", "dir", "-ed", "exclude", "-i", "1s", "-p", "**/*.go", "-e", "**/*_test.go", "-b", "echo build", "-r", "echo run"},
+			config: Config{
+				Dir:         "dir",
+				ExcludeDirs: []string{"exclude"},
+				Interval:    1 * time.Second,
+				Actions: []Action{
+					{
+						Patterns:        []string{"**/*.go"},
+						ExcludePatterns: []string{"**/*_test.go"},
+						BuildCommands:   []string{"echo build"},
+						RunCommand:      "echo run",
+					},
+				},
+			},
+		},
+		"configFile: not exists": {
+			args: []string{"revolver", "-c", "testdata/not_exists.yml"},
+			err:  true,
+		},
+		"configFile: empty": {
+			args: []string{"revolver", "-c", "testdata/empty.yml"},
+			err:  true,
+		},
+		"configFile: no action": {
+			args: []string{"revolver", "-c", "testdata/no_action.yml"},
+			err:  true,
+		},
+		"configFile: no command": {
+			args: []string{"revolver", "-c", "testdata/no_command.yml"},
+			err:  true,
+		},
+		"configFile and build command": {
+			args: []string{"revolver", "-b", "echo 1", "-c", "testdata/no_command.yml"},
+			config: Config{
+				Dir:      ".",
+				Interval: 500 * time.Millisecond,
+				Actions: []Action{
+					{
+						Patterns:      []string{"**/*"},
+						BuildCommands: []string{"echo 1"},
+					},
+				},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			config, err := ParseFlags(tc.args)
+			if err != nil {
+				if !tc.err {
+					t.Errorf("ParseFlags() err should be nil; got: %v", err)
+				}
+				return
+			}
+			if tc.err {
+				t.Errorf("ParseFlags() err should be %v; got: nil", err)
+				return
+			}
+
+			if !configEquals(*config, tc.config) {
+				t.Errorf("ParseFlags() should be %v; got: %v", tc.config, config)
 			}
 		})
 	}
