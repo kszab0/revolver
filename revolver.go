@@ -152,21 +152,38 @@ func Filter(includePatterns, excludePatterns []string) FilterFunc {
 	}
 }
 
+type stringArr []string
+
+// UnmarshalYAML implements the Unmarshaler interface of the yaml pkg.
+func (s *stringArr) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var yamlStringArr []string
+	if err := unmarshal(&yamlStringArr); err == nil {
+		*s = yamlStringArr
+		return nil
+	}
+	var yamlString string
+	if err := unmarshal(&yamlString); err != nil {
+		return err
+	}
+	*s = []string{yamlString}
+	return nil
+}
+
 // Action is a block in a Config file
 type Action struct {
-	Name            string   `yaml:"name,omitempty"`
-	Patterns        []string `yaml:"patterns,omitempty"`
-	ExcludePatterns []string `yaml:"exclude,omitempty"`
-	BuildCommands   []string `yaml:"build,omitempty"`
-	RunCommand      string   `yaml:"run,omitempty"`
+	Name            string    `yaml:"name,omitempty"`
+	Patterns        stringArr `yaml:"pattern,omitempty"`
+	ExcludePatterns stringArr `yaml:"exclude,omitempty"`
+	BuildCommands   stringArr `yaml:"build,omitempty"`
+	RunCommand      string    `yaml:"run,omitempty"`
 }
 
 // Config holds all the configuration for running revolver.
 type Config struct {
 	Dir         string        `yaml:"dir,omitempty"`
-	ExcludeDirs []string      `yaml:"excludeDirs,omitempty"`
+	ExcludeDirs stringArr     `yaml:"excludeDir,omitempty"`
 	Interval    time.Duration `yaml:"interval,omitempty"`
-	Actions     []Action      `yaml:"actions"`
+	Actions     []Action      `yaml:"action"`
 }
 
 func (config *Config) validate() error {

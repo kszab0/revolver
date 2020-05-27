@@ -394,21 +394,25 @@ func TestParseConfig(t *testing.T) {
 		err     bool
 	}
 	for name, tc := range map[string]testCase{
-		"no action": {
+		"empty": {
 			content: ``,
 			err:     true,
 		},
+		"no action": {
+			content: `action:`,
+			err:     true,
+		},
+		"maleformed action": {
+			content: `action: "maleformed"`,
+			err:     true,
+		},
 		"no command": {
-			content: `actions:
+			content: `action:
   - name: "action"`,
 			err: true,
 		},
-		"maleformed": {
-			content: `actions: "maleformed"`,
-			err:     true,
-		},
 		"minimal": {
-			content: `actions:
+			content: `action:
   - build: ["echo ok"]`,
 			config: Config{
 				Dir:      ".",
@@ -424,11 +428,11 @@ func TestParseConfig(t *testing.T) {
 		},
 		"full": {
 			content: `dir: "dir"
-excludeDirs: ["exclude"]
+excludeDir: ["exclude"]
 interval: 1s
-actions:
+action:
   - name: "action"
-    patterns: ["**/*.go"]
+    pattern: ["**/*.go"]
     exclude: ["**/*_test.go"]
     build: ["echo build"]
     run: "echo run"`,
@@ -448,6 +452,26 @@ actions:
 			},
 			err: false,
 		},
+		"without arrays": {
+			content: `excludeDir: "exclude"
+action:
+  - pattern: "**/*.go"
+    exclude: "**/*_test.go"
+    build: "echo build"`,
+			config: Config{
+				Dir:         ".",
+				ExcludeDirs: []string{"exclude"},
+				Interval:    500 * time.Millisecond,
+				Actions: []Action{
+					{
+						Patterns:        []string{"**/*.go"},
+						ExcludePatterns: []string{"**/*_test.go"},
+						BuildCommands:   []string{"echo build"},
+					},
+				},
+			},
+			err: false,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			config, err := ParseConfig([]byte(tc.content))
@@ -457,7 +481,6 @@ actions:
 				}
 				return
 			}
-
 			if tc.err {
 				t.Errorf("ParseConfig() err should be %v; got: nil", err)
 				return
