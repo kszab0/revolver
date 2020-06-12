@@ -1,3 +1,7 @@
+[![Build Status](https://api.travis-ci.org/kszab0/revolver.svg?branch=master)](https://travis-ci.org/github/kszab0/revolver)
+[![Coverage Status](https://coveralls.io/repos/github/kszab0/revolver/badge.svg?branch=master)](https://coveralls.io/github/kszab0/revolver?branch=master)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kszab0/revolver)](https://goreportcard.com/report/github.com/kszab0/revolver)
+
 # revolver
 
 A simple reloader tool written in [Go](https://golang.org).
